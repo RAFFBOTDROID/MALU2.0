@@ -1,1 +1,2 @@
-pip install groq python-telegram-bot
+groq
+python-telegram-bot==21.6
