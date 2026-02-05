@@ -91,12 +91,37 @@ async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
-    # ❌ NÃO RESPONDE REPLIES
+    # NÃO RESPONDE REPLIES
     if update.message.reply_to_message:
         return
 
-    chat_id = update.message.chat_id
-    now = time.time()
+    text = update.message.text.strip()
+
+    await update.message.reply_text("🧠 Pensando com IA...")
+
+    try:
+        print("📩 Mensagem recebida:", text)
+
+        res = client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.9,
+            max_tokens=150
+        )
+
+        print("📦 Resposta bruta da Groq:", res)
+
+        reply = res.choices[0].message.content.strip()
+
+        await update.message.reply_text(reply)
+
+    except Exception as e:
+        print("❌ ERRO GROQ:", e)
+        await update.message.reply_text(f"❌ IA falhou: {e}")
+
 
     # ⏳ CONTROLE DE FLOOD
     if chat_id in last_response_time:
