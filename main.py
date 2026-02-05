@@ -98,10 +98,14 @@ def home():
     return "💖 Malu Ultra Elite ONLINE"
 
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def telegram_webhook():
+def telegram_webhook():
     data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
+
+    async def process():
+        update = Update.de_json(data, application.bot)
+        await application.process_update(update)
+
+    asyncio.run(process())
     return "ok"
 
 # ======================
