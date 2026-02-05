@@ -12,6 +12,7 @@ PORT = int(os.getenv("PORT", 10000))
 WEBHOOK_URL = f"https://malu2-0.onrender.com/{TOKEN}"
 
 app = Flask(__name__)
+
 application = Application.builder().token(TOKEN).build()
 
 # =========================
@@ -30,8 +31,8 @@ def ai_reply(text):
                 {
                     "role": "system",
                     "content": (
-                        "Você é MALU, uma garota simpática, educada, humana, engraçada e carismática. "
-                        "Fale como amiga real, SEM ser invasiva, SEM responder mensagens em reply."
+                        "Você é MALU, uma garota simpática, educada, humana, divertida e carismática. "
+                        "Fale como amiga real, SEM ser invasiva e SEM responder mensagens em reply."
                     )
                 },
                 {"role": "user", "content": text}
@@ -49,15 +50,13 @@ def ai_reply(text):
         return r.json()["choices"][0]["message"]["content"]
 
     except:
-        return "💖 Oops… minha mente bugou 😅 tenta de novo?"
+        return "💖 Ai… meu cérebro deu uma leve bugada 😅 tenta de novo?"
 
 # =========================
 # START
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo!"
-    )
+    await update.message.reply_text("💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo!")
 
 # =========================
 # CHAT MALU — SEM REPLY
@@ -92,12 +91,22 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
 
 # =========================
+# INIT APP LOOP
+# =========================
+async def init_app():
+    await application.initialize()
+    await application.bot.set_webhook(WEBHOOK_URL)
+
+asyncio.get_event_loop().run_until_complete(init_app())
+
+# =========================
 # WEBHOOK RECEIVER
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
-    asyncio.run(application.process_update(Update.de_json(data, application.bot)))
+    update = Update.de_json(data, application.bot)
+    asyncio.get_event_loop().create_task(application.process_update(update))
     return "ok"
 
 # =========================
@@ -108,12 +117,8 @@ def home():
     return "💖 Malu Ultra Elite Online"
 
 # =========================
-# START SERVER + WEBHOOK
+# START SERVER
 # =========================
-async def setup_webhook():
-    await application.bot.set_webhook(WEBHOOK_URL)
-
 if __name__ == "__main__":
     print("💖 MALU ULTRA FIXA INICIANDO...")
-    asyncio.run(setup_webhook())
     app.run(host="0.0.0.0", port=PORT)
