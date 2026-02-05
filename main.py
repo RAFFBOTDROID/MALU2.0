@@ -5,9 +5,6 @@ from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-# =========================
-# CONFIG
-# =========================
 TOKEN = os.getenv("BOT_TOKEN")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
@@ -33,14 +30,13 @@ def ai_reply(text):
                 {
                     "role": "system",
                     "content": (
-                        "Você é MALU, uma garota simpática, educada, humana, divertida e carismática. "
-                        "Fale como amiga real. NÃO responda mensagens em reply. NÃO seja invasiva."
+                        "Você é MALU, uma garota simpática, humana, divertida, carismática e educada. "
+                        "Responda como pessoa real, SEM parecer robô, SEM ser invasiva."
                     )
                 },
                 {"role": "user", "content": text}
             ],
-            "temperature": 0.8,
-            "max_tokens": 300
+            "temperature": 0.7
         }
 
         r = requests.post(
@@ -50,55 +46,19 @@ def ai_reply(text):
             timeout=15
         )
 
-        data = r.json()
-
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
-
-        return malu_fallback(text)
+        return r.json()["choices"][0]["message"]["content"]
 
     except:
-        return malu_fallback(text)
-
-# =========================
-# FALLBACK SE IA CAIR
-# =========================
-import random
-
-def malu_fallback(text):
-    respostas = [
-        "💖 Eu tô aqui com você… fala mais 🥺",
-        "😏 Hmmm, interessante… continua.",
-        "🔥 Você fala bonito demais.",
-        "👀 Eu vi isso hein…",
-        "💋 Se continuar assim, eu me apaixono.",
-        "😈 Eu gosto quando você fala comigo.",
-        "💞 Você é uma boa companhia."
-    ]
-
-    t = text.lower()
-
-    if "oi" in t:
-        return "💖 Oii amor, tava esperando você 😘"
-    if "bom dia" in t:
-        return "☀️ Bom diaaa, coisa linda 💕"
-    if "boa noite" in t:
-        return "🌙 Boa noite, dorme pensando em mim 😌"
-    if "te amo" in t:
-        return "💞 Eu amo sua atenção… continua comigo."
-
-    return random.choice(respostas)
+        return "💖 Oops… buguei um pouquinho 😅 tenta de novo?"
 
 # =========================
 # START
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo!"
-    )
+    await update.message.reply_text("💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo!")
 
 # =========================
-# CHAT MALU — SEM REPLY
+# CHAT MALU — HUMANA
 # =========================
 async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -123,20 +83,18 @@ async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(t) < 4:
         return
 
-    # Chance de resposta para não floodar
-    import random
-    chance = 0.35  # 35% chance de responder
-    if random.random() > chance:
-        return
-
-    # Ignorar mensagens automáticas/spam
+    # Anti-spam
     bloquear = ["http", "www", ".com", "promo", "cupom"]
     if any(b in t for b in bloquear):
         return
 
+    # Chance humana (não flooda)
+    import random
+    if random.random() > 0.35:
+        return
+
     resposta = ai_reply(text)
     await msg.reply_text(resposta)
-
 
 # =========================
 # HANDLERS
@@ -145,19 +103,17 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
 
 # =========================
-# WEBHOOK RECEIVER (FIX DEFINITIVO)
+# WEBHOOK — SEM ERRO LOOP
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
 
     async def process():
         await application.initialize()
-        await application.process_update(update)
+        await application.process_update(Update.de_json(data, application.bot))
 
     asyncio.run(process())
-
     return "ok"
 
 # =========================
@@ -168,18 +124,13 @@ def home():
     return "💖 Malu Ultra Elite Online"
 
 # =========================
-# SET WEBHOOK
+# START SERVER
 # =========================
-async def setup_webhook():
+async def setup():
     await application.initialize()
     await application.bot.set_webhook(WEBHOOK_URL)
 
-# =========================
-# START SERVER
-# =========================
 if __name__ == "__main__":
     print("💖 MALU ULTRA FIXA INICIANDO...")
-
-    asyncio.run(setup_webhook())
-
+    asyncio.run(setup())
     app.run(host="0.0.0.0", port=PORT)
