@@ -117,11 +117,26 @@ async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith("/"):
         return
 
-    gatilhos = ["malu", "oi malu", "fala malu", "hey malu"]
+    t = text.lower()
 
-    if any(g in text.lower() for g in gatilhos) or len(text) > 15:
-        resposta = ai_reply(text)
-        await msg.reply_text(resposta)
+    # Ignorar mensagens muito curtas
+    if len(t) < 4:
+        return
+
+    # Chance de resposta para não floodar
+    import random
+    chance = 0.35  # 35% chance de responder
+    if random.random() > chance:
+        return
+
+    # Ignorar mensagens automáticas/spam
+    bloquear = ["http", "www", ".com", "promo", "cupom"]
+    if any(b in t for b in bloquear):
+        return
+
+    resposta = ai_reply(text)
+    await msg.reply_text(resposta)
+
 
 # =========================
 # HANDLERS
