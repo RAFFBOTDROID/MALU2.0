@@ -25,6 +25,9 @@ asyncio.set_event_loop(loop)
 # =========================
 def ai_reply(text):
     try:
+        if not GROQ_KEY:
+            return "⚠️ IA offline — chave não configurada."
+
         headers = {
             "Authorization": f"Bearer {GROQ_KEY}",
             "Content-Type": "application/json"
@@ -36,25 +39,36 @@ def ai_reply(text):
                 {
                     "role": "system",
                     "content": (
-                        "Você é MALU, uma garota simpática, educada, humana, engraçada e carismática. "
-                        "Fale como amiga real, SEM ser invasiva, SEM responder mensagens em reply."
+                        "Você é MALU, uma garota simpática, humana, carismática e educada. "
+                        "Fale como amiga real. NÃO seja invasiva. NÃO responda mensagens em reply. "
+                        "Responda curto, natural e educado."
                     )
                 },
                 {"role": "user", "content": text}
             ],
-            "temperature": 0.7
+            "temperature": 0.8,
+            "max_tokens": 200
         }
 
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=15
+            timeout=20
         )
 
-        return r.json()["choices"][0]["message"]["content"]
+        if r.status_code != 200:
+            return "💭 Tive um pequeno bug mental… tenta de novo?"
 
-    except:
+        data = r.json()
+
+        if "choices" not in data:
+            return "😵 Minha IA travou… tenta de novo?"
+
+        return data["choices"][0]["message"]["content"].strip()
+
+    except Exception as e:
+        print("ERRO IA:", e)
         return "💖 Oops… minha mente bugou 😅 tenta de novo?"
 
 # =========================
