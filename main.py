@@ -33,14 +33,14 @@ def ai_reply(text):
                 {
                     "role": "system",
                     "content": (
-                        "Você é MALU, uma garota simpática, educada, humana, carismática, divertida e charmosa. "
-                        "Fale como amiga real. NÃO seja invasiva. NÃO responda mensagens em reply."
+                        "Você é MALU, uma garota simpática, educada, humana, divertida e carismática. "
+                        "Fale como amiga real. NÃO responda mensagens em reply. NÃO seja invasiva."
                     )
                 },
                 {"role": "user", "content": text}
             ],
             "temperature": 0.8,
-            "max_tokens": 350
+            "max_tokens": 300
         }
 
         r = requests.post(
@@ -61,7 +61,7 @@ def ai_reply(text):
         return malu_fallback(text)
 
 # =========================
-# FALLBACK — SE IA CAIR
+# FALLBACK SE IA CAIR
 # =========================
 import random
 
@@ -119,7 +119,6 @@ async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     gatilhos = ["malu", "oi malu", "fala malu", "hey malu"]
 
-    # Responder se chamar ou se texto for maior
     if any(g in text.lower() for g in gatilhos) or len(text) > 15:
         resposta = ai_reply(text)
         await msg.reply_text(resposta)
@@ -131,18 +130,18 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
 
 # =========================
-# WEBHOOK RECEIVER (SEM BUG DE EVENT LOOP)
+# WEBHOOK RECEIVER (FIX DEFINITIVO)
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
-
     update = Update.de_json(data, application.bot)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(application.process_update(update))
-    loop.close()
+    async def process():
+        await application.initialize()
+        await application.process_update(update)
+
+    asyncio.run(process())
 
     return "ok"
 
@@ -157,6 +156,7 @@ def home():
 # SET WEBHOOK
 # =========================
 async def setup_webhook():
+    await application.initialize()
     await application.bot.set_webhook(WEBHOOK_URL)
 
 # =========================
