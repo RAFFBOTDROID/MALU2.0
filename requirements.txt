@@ -1,2 +1,5 @@
-groq
 python-telegram-bot==21.6
+flask
+requests
+groq
+
