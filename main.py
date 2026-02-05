@@ -15,6 +15,12 @@ app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
 # =========================
+# EVENT LOOP FIXO GLOBAL
+# =========================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# =========================
 # IA — MALU PERSONALIDADE
 # =========================
 def ai_reply(text):
@@ -90,16 +96,14 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
 
 # =========================
-# WEBHOOK RECEIVER (SYNC FIX)
+# WEBHOOK RECEIVER — FIX LOOP
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
 
-    loop = asyncio.new_event_loop()
     loop.run_until_complete(application.process_update(update))
-    loop.close()
 
     return "ok"
 
@@ -119,5 +123,5 @@ async def setup_webhook():
 
 if __name__ == "__main__":
     print("💖 MALU ULTRA FIXA INICIANDO...")
-    asyncio.run(setup_webhook())
+    loop.run_until_complete(setup_webhook())
     app.run(host="0.0.0.0", port=PORT)
