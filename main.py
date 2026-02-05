@@ -1,141 +1,95 @@
 import os
-import asyncio
 import requests
+import openai
 from flask import Flask, request
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-TOKEN = os.getenv("BOT_TOKEN")
-GROQ_KEY = os.getenv("GROQ_API_KEY")
+# ================= CONFIG =================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENAI_KEY = os.getenv("OPENAI_KEY")
 PORT = int(os.getenv("PORT", 10000))
 
-WEBHOOK_URL = f"https://malu2-0.onrender.com/{TOKEN}"
+openai.api_key = OPENAI_KEY
+
+API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 app = Flask(__name__)
-application = Application.builder().token(TOKEN).build()
 
-# =========================
-# EVENT LOOP FIXO GLOBAL
-# =========================
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
+# ================= UTIL =================
 
-# =========================
-# IA — MALU PERSONALIDADE
-# =========================
-def ai_reply(text):
+def send_message(chat_id, text, reply_to=None):
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    if reply_to:
+        payload["reply_to_message_id"] = reply_to
+
+    requests.post(f"{API_URL}/sendMessage", json=payload)
+
+
+def malu_ai_response(user_text):
     try:
-        if not GROQ_KEY:
-            return "⚠️ IA offline — chave não configurada."
-
-        headers = {
-            "Authorization": f"Bearer {GROQ_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "model": "llama3-70b-8192",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "Você é MALU, uma garota simpática, humana, carismática e educada. "
-                        "Fale como amiga real. NÃO seja invasiva. NÃO responda mensagens em reply. "
-                        "Responda curto, natural e educado."
-                    )
-                },
-                {"role": "user", "content": text}
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Você é MALU ULTRA, uma IA feminina, carismática, inteligente, sarcástica quando necessário, divertida e protetora."},
+                {"role": "user", "content": user_text}
             ],
-            "temperature": 0.8,
-            "max_tokens": 200
-        }
-
-        r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=20
+            temperature=0.8,
+            max_tokens=400
         )
 
-        if r.status_code != 200:
-            return "💭 Tive um pequeno bug mental… tenta de novo?"
-
-        data = r.json()
-
-        if "choices" not in data:
-            return "😵 Minha IA travou… tenta de novo?"
-
-        return data["choices"][0]["message"]["content"].strip()
+        return response.choices[0].message.content.strip()
 
     except Exception as e:
-        print("ERRO IA:", e)
-        return "💖 Oops… minha mente bugou 😅 tenta de novo?"
+        return "💖 Estou aqui, mas minha IA teve um pequeno erro técnico agora. Tenta de novo, amor."
 
-# =========================
-# START
-# =========================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo!"
-    )
 
-# =========================
-# CHAT MALU — SEM REPLY
-# =========================
-async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-    if not msg:
-        return
+# ================= WEBHOOK =================
 
-    if msg.reply_to_message:
-        return
+@app.route("/", methods=["GET"])
+def home():
+    return "💖 MALU ULTRA FIXA ONLINE"
 
-    text = msg.text
-    if not text:
-        return
 
-    if text.startswith("/"):
-        return
-
-    gatilhos = ["malu", "oi malu", "fala malu", "hey malu"]
-
-    if any(g in text.lower() for g in gatilhos) or len(text) > 15:
-        resposta = ai_reply(text)
-        await msg.reply_text(resposta)
-
-# =========================
-# HANDLERS
-# =========================
-application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
-
-# =========================
-# WEBHOOK RECEIVER — FIX LOOP
-# =========================
-@app.route(f"/{TOKEN}", methods=["POST"])
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
+    data = request.get_json()
 
-    loop.run_until_complete(application.process_update(update))
+    if "message" in data:
+        msg = data["message"]
+
+        chat_id = msg["chat"]["id"]
+        text = msg.get("text", "")
+        msg_id = msg.get("message_id")
+
+        if text.startswith("/start"):
+            send_message(chat_id, "💖 Oi! Eu sou a *MALU ULTRA FIXA*. Fala comigo 😘", msg_id)
+            return "ok"
+
+        if text.startswith("/ping"):
+            send_message(chat_id, "🏓 Pong! MALU está viva 😈", msg_id)
+            return "ok"
+
+        if text.strip() != "":
+            reply = malu_ai_response(text)
+            send_message(chat_id, reply, msg_id)
 
     return "ok"
 
-# =========================
-# HEALTH CHECK
-# =========================
-@app.route("/")
-def home():
-    return "💖 Malu Ultra Elite Online"
 
-# =========================
-# START SERVER + WEBHOOK
-# =========================
-async def setup_webhook():
-    await application.initialize()
-    await application.bot.set_webhook(WEBHOOK_URL)
+# ================= AUTO SET WEBHOOK =================
+
+def set_webhook():
+    url = os.getenv("RENDER_EXTERNAL_URL")
+    if url:
+        hook_url = f"{url}/{BOT_TOKEN}"
+        requests.get(f"{API_URL}/setWebhook?url={hook_url}")
+        print("✅ Webhook configurado:", hook_url)
+
 
 if __name__ == "__main__":
+    set_webhook()
     print("💖 MALU ULTRA FIXA INICIANDO...")
-    loop.run_until_complete(setup_webhook())
     app.run(host="0.0.0.0", port=PORT)
