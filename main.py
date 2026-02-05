@@ -30,7 +30,8 @@ class PingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Malu alive 💖")
+        self.wfile.write("Malu alive 💖".encode("utf-8"))
+
 
 def run_dummy_server():
     server = HTTPServer(("0.0.0.0", PORT), PingHandler)
