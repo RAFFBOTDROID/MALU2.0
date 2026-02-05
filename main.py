@@ -1,22 +1,22 @@
 import os
+import asyncio
 import requests
 from flask import Flask, request
-from telegram import Bot, Update
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = os.getenv("BOT_TOKEN")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
-PORT = int(os.getenv("PORT", 10000))
+PORT = int(os.getenv("PORT", 10000"))
 
 WEBHOOK_URL = f"https://malu2-0.onrender.com/{TOKEN}"
 
-bot = Bot(token=TOKEN)
 app = Flask(__name__)
 
 application = Application.builder().token(TOKEN).build()
 
 # =========================
-# IA GROQ — MALU
+# IA — MALU PERSONALIDADE
 # =========================
 def ai_reply(text):
     try:
@@ -31,8 +31,8 @@ def ai_reply(text):
                 {
                     "role": "system",
                     "content": (
-                        "Você é MALU, uma garota simpática, educada, engraçada, humana e carismática. "
-                        "Você conversa naturalmente em grupos, SEM ser invasiva, SEM responder replies."
+                        "Você é MALU, uma garota simpática, educada, humana, divertida e carismática. "
+                        "Fale natural, SEM ser invasiva, SEM responder replies, como amiga real."
                     )
                 },
                 {"role": "user", "content": text}
@@ -50,20 +50,19 @@ def ai_reply(text):
         return r.json()["choices"][0]["message"]["content"]
 
     except:
-        return "💖 Ops… buguei um pouquinho, tenta de novo?"
+        return "💖 Oops… minha mente bugou um pouquinho 😅 tenta de novo?"
 
 # =========================
 # START
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💖 Oi! Eu sou a **Malu Ultra Elite**. Me chama que eu respondo!")
+    await update.message.reply_text("💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo!")
 
 # =========================
-# CHAT MALU (SEM REPLY)
+# CHAT MALU — SEM REPLY
 # =========================
 async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-
     if not msg:
         return
 
@@ -79,10 +78,9 @@ async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith("/"):
         return
 
-    # Malu só fala se chamarem ou conversa natural
-    gatilhos = ["malu", "oi malu", "hey malu", "fala malu"]
+    gatilhos = ["malu", "oi malu", "fala malu", "hey malu"]
 
-    if any(g in text.lower() for g in gatilhos) or len(text) > 12:
+    if any(g in text.lower() for g in gatilhos) or len(text) > 15:
         resposta = ai_reply(text)
         await msg.reply_text(resposta)
 
@@ -93,13 +91,12 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
 
 # =========================
-# WEBHOOK ENDPOINT
+# WEBHOOK RECEIVER
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     data = request.get_json(force=True)
-    update = Update.de_json(data, bot)
-    await application.process_update(update)
+    asyncio.run(application.process_update(Update.de_json(data, application.bot)))
     return "ok"
 
 # =========================
@@ -110,11 +107,14 @@ def home():
     return "💖 Malu Ultra Elite Online"
 
 # =========================
-# START SERVER + WEBHOOK
+# START APP + WEBHOOK
 # =========================
-if __name__ == "__main__":
-    print("💖 MALU ULTRA FIXA INICIANDO")
+async def setup_webhook():
+    await application.bot.set_webhook(WEBHOOK_URL)
 
-    bot.set_webhook(WEBHOOK_URL)
+if __name__ == "__main__":
+    print("💖 MALU ULTRA FIXA INICIANDO...")
+
+    asyncio.run(setup_webhook())
 
     app.run(host="0.0.0.0", port=PORT)
