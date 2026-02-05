@@ -67,7 +67,6 @@ async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg:
         return
 
-    # NÃO RESPONDER REPLY
     if msg.reply_to_message:
         return
 
@@ -75,7 +74,6 @@ async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    # Ignorar comandos
     if text.startswith("/"):
         return
 
@@ -92,13 +90,17 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
 
 # =========================
-# WEBHOOK RECEIVER (FIX LOOP)
+# WEBHOOK RECEIVER (SYNC FIX)
 # =========================
 @app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, application.bot)
-    await application.process_update(update)
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(application.process_update(update))
+    loop.close()
+
     return "ok"
 
 # =========================
