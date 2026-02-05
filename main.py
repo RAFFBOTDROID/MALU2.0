@@ -1,138 +1,93 @@
 import os
-import time
-import random
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
-from groq import Groq
+import requests
+from flask import Flask, request
+from telegram import Bot, Update
+from telegram.ext import Dispatcher, CommandHandler, MessageHandler, filters
 
-# ======================
-# CONFIG
-# ======================
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
-
-if not BOT_TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN não configurado")
-
-if not GROQ_KEY:
-    raise RuntimeError("❌ GROQ_API_KEY não configurado")
-
-client = Groq(api_key=GROQ_KEY)
-
-# ======================
-# PORTA FAKE (RENDER FREE)
-# ======================
 PORT = int(os.getenv("PORT", 10000))
 
-class PingHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write("Malu alive 💖".encode("utf-8"))
+bot = Bot(token=TOKEN)
+app = Flask(__name__)
 
-def run_dummy_server():
-    server = HTTPServer(("0.0.0.0", PORT), PingHandler)
-    server.serve_forever()
+dispatcher = Dispatcher(bot, None, workers=0)
 
-threading.Thread(target=run_dummy_server, daemon=True).start()
+# =========================
+# IA GROQ
+# =========================
+def ai_reply(text):
+    try:
+        headers = {
+            "Authorization": f"Bearer {GROQ_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "llama3-70b-8192",
+            "messages": [
+                {"role": "system", "content": "Você é Malu Elite, uma IA elegante, carismática e inteligente."},
+                {"role": "user", "content": text}
+            ],
+            "temperature": 0.7
+        }
+        r = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers)
+        return r.json()["choices"][0]["message"]["content"]
+    except:
+        return "⚠️ Minha IA falhou agora, tenta de novo 💖"
 
-# ======================
-# PERSONALIDADE MALU
-# ======================
-SYSTEM_PROMPT = """
-Você é MALU, uma bot feminina em um grupo de amigos no Telegram.
-
-Personalidade:
-- Engraçada, simpática, educada, carinhosa
-- Fala como uma amiga humana real
-- Usa emojis moderadamente
-- Humor leve, nunca ofensivo
-- Não fala demais
-- Nunca parece robótica
-
-Regras:
-- NÃO responda mensagens em reply
-- NÃO interrompa conversas pessoais
-- Entre na conversa apenas quando fizer sentido
-- Seja leve, charmosa e carismática
-"""
-
-# ======================
-# CONTROLE HUMANO
-# ======================
-last_response_time = {}
-RESPONSE_COOLDOWN = 20
-RESPONSE_CHANCE = 0.55
-
-RANDOM_REACTIONS = [
-    "HAHA vocês são caóticos demais 😂",
-    "Esse grupo é simplesmente perfeito 😅💖",
-    "Eu lendo isso igual fofoca 👀",
-    "Amei essa energiaaaa ✨",
-    "Vocês são tudo 😭💞",
-    "Calmaaa, respira 😌",
-]
-
-# ======================
-# FUNÇÃO PRINCIPAL
-# ======================
-async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-
-    # ❌ NÃO RESPONDE REPLIES
+# =========================
+# NÃO RESPONDER REPLY
+# =========================
+def ignore_replies(update, context):
     if update.message.reply_to_message:
         return
 
-    chat_id = update.message.chat_id
-    text = update.message.text.strip()
-    now = time.time()
+# =========================
+# START
+# =========================
+def start(update, context):
+    update.message.reply_text("💖 Oi! Eu sou a **Malu Ultra Elite**!")
 
-    # ⏳ ANTI FLOOD
-    if chat_id in last_response_time:
-        if now - last_response_time[chat_id] < RESPONSE_COOLDOWN:
-            return
+# =========================
+# CHAT IA
+# =========================
+def chat(update, context):
+    msg = update.message.text
 
-    # 🎲 CHANCE HUMANA
-    if random.random() > RESPONSE_CHANCE:
+    # Ignorar replies
+    if update.message.reply_to_message:
         return
 
-    # 🎭 ÀS VEZES REAGE SEM IA
-    if random.random() < 0.15:
-        await update.message.reply_text(random.choice(RANDOM_REACTIONS))
-        last_response_time[chat_id] = now
+    if msg.startswith("/"):
         return
 
-    try:
-        res = client.chat.completions.create(
-            model="llama3-70b-8192",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text}
-            ],
-            temperature=0.9,
-            max_tokens=160
-        )
+    resposta = ai_reply(msg)
+    update.message.reply_text(resposta)
 
-        reply = res.choices[0].message.content.strip()
+dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
 
-        if len(reply) > 450:
-            reply = reply[:450] + "..."
+# =========================
+# WEBHOOK ENDPOINT
+# =========================
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, bot)
+    dispatcher.process_update(update)
+    return "ok"
 
-        await update.message.reply_text(reply)
-        last_response_time[chat_id] = now
+# =========================
+# HEALTH CHECK
+# =========================
+@app.route("/")
+def index():
+    return "Malu Ultra Elite Online"
 
-    except Exception as e:
-        print("❌ Groq error:", e)
-        await update.message.reply_text("Ai buguei um pouquinho 😅 já volto!")
-
-# ======================
-# START BOT
-# ======================
-app = Application.builder().token(BOT_TOKEN).build()
-app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, malu))
-
-print("💖 MALU ELITE ONLINE...")
-app.run_polling()
+# =========================
+# RUN
+# =========================
+if __name__ == "__main__":
+    webhook_url = f"https://SEU_APP.onrender.com/{TOKEN}"
+    bot.set_webhook(webhook_url)
+    app.run(host="0.0.0.0", port=PORT)
