@@ -1,95 +1,170 @@
 import os
+import asyncio
 import requests
-import openai
 from flask import Flask, request
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-# ================= CONFIG =================
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENAI_KEY = os.getenv("OPENAI_KEY")
+# =========================
+# CONFIG
+# =========================
+TOKEN = os.getenv("BOT_TOKEN")
+GROQ_KEY = os.getenv("GROQ_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
 
-openai.api_key = OPENAI_KEY
-
-API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+WEBHOOK_URL = f"https://malu2-0.onrender.com/{TOKEN}"
 
 app = Flask(__name__)
+application = Application.builder().token(TOKEN).build()
 
-# ================= UTIL =================
-
-def send_message(chat_id, text, reply_to=None):
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    if reply_to:
-        payload["reply_to_message_id"] = reply_to
-
-    requests.post(f"{API_URL}/sendMessage", json=payload)
-
-
-def malu_ai_response(user_text):
+# =========================
+# IA — MALU PERSONALIDADE
+# =========================
+def ai_reply(text):
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Você é MALU ULTRA, uma IA feminina, carismática, inteligente, sarcástica quando necessário, divertida e protetora."},
-                {"role": "user", "content": user_text}
+        headers = {
+            "Authorization": f"Bearer {GROQ_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": "llama3-70b-8192",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Você é MALU, uma garota simpática, educada, humana, carismática, divertida e charmosa. "
+                        "Fale como amiga real. NÃO seja invasiva. NÃO responda mensagens em reply."
+                    )
+                },
+                {"role": "user", "content": text}
             ],
-            temperature=0.8,
-            max_tokens=400
+            "temperature": 0.8,
+            "max_tokens": 350
+        }
+
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=15
         )
 
-        return response.choices[0].message.content.strip()
+        data = r.json()
 
-    except Exception as e:
-        return "💖 Estou aqui, mas minha IA teve um pequeno erro técnico agora. Tenta de novo, amor."
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"]
 
+        return malu_fallback(text)
 
-# ================= WEBHOOK =================
+    except:
+        return malu_fallback(text)
 
-@app.route("/", methods=["GET"])
-def home():
-    return "💖 MALU ULTRA FIXA ONLINE"
+# =========================
+# FALLBACK — SE IA CAIR
+# =========================
+import random
 
+def malu_fallback(text):
+    respostas = [
+        "💖 Eu tô aqui com você… fala mais 🥺",
+        "😏 Hmmm, interessante… continua.",
+        "🔥 Você fala bonito demais.",
+        "👀 Eu vi isso hein…",
+        "💋 Se continuar assim, eu me apaixono.",
+        "😈 Eu gosto quando você fala comigo.",
+        "💞 Você é uma boa companhia."
+    ]
 
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+    t = text.lower()
+
+    if "oi" in t:
+        return "💖 Oii amor, tava esperando você 😘"
+    if "bom dia" in t:
+        return "☀️ Bom diaaa, coisa linda 💕"
+    if "boa noite" in t:
+        return "🌙 Boa noite, dorme pensando em mim 😌"
+    if "te amo" in t:
+        return "💞 Eu amo sua atenção… continua comigo."
+
+    return random.choice(respostas)
+
+# =========================
+# START
+# =========================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo!"
+    )
+
+# =========================
+# CHAT MALU — SEM REPLY
+# =========================
+async def malu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg:
+        return
+
+    # NÃO RESPONDER REPLY
+    if msg.reply_to_message:
+        return
+
+    text = msg.text
+    if not text:
+        return
+
+    # Ignorar comandos
+    if text.startswith("/"):
+        return
+
+    gatilhos = ["malu", "oi malu", "fala malu", "hey malu"]
+
+    # Responder se chamar ou se texto for maior
+    if any(g in text.lower() for g in gatilhos) or len(text) > 15:
+        resposta = ai_reply(text)
+        await msg.reply_text(resposta)
+
+# =========================
+# HANDLERS
+# =========================
+application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu))
+
+# =========================
+# WEBHOOK RECEIVER (SEM BUG DE EVENT LOOP)
+# =========================
+@app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json()
+    data = request.get_json(force=True)
 
-    if "message" in data:
-        msg = data["message"]
+    update = Update.de_json(data, application.bot)
 
-        chat_id = msg["chat"]["id"]
-        text = msg.get("text", "")
-        msg_id = msg.get("message_id")
-
-        if text.startswith("/start"):
-            send_message(chat_id, "💖 Oi! Eu sou a *MALU ULTRA FIXA*. Fala comigo 😘", msg_id)
-            return "ok"
-
-        if text.startswith("/ping"):
-            send_message(chat_id, "🏓 Pong! MALU está viva 😈", msg_id)
-            return "ok"
-
-        if text.strip() != "":
-            reply = malu_ai_response(text)
-            send_message(chat_id, reply, msg_id)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(application.process_update(update))
+    loop.close()
 
     return "ok"
 
+# =========================
+# HEALTH CHECK
+# =========================
+@app.route("/")
+def home():
+    return "💖 Malu Ultra Elite Online"
 
-# ================= AUTO SET WEBHOOK =================
+# =========================
+# SET WEBHOOK
+# =========================
+async def setup_webhook():
+    await application.bot.set_webhook(WEBHOOK_URL)
 
-def set_webhook():
-    url = os.getenv("RENDER_EXTERNAL_URL")
-    if url:
-        hook_url = f"{url}/{BOT_TOKEN}"
-        requests.get(f"{API_URL}/setWebhook?url={hook_url}")
-        print("✅ Webhook configurado:", hook_url)
-
-
+# =========================
+# START SERVER
+# =========================
 if __name__ == "__main__":
-    set_webhook()
     print("💖 MALU ULTRA FIXA INICIANDO...")
+
+    asyncio.run(setup_webhook())
+
     app.run(host="0.0.0.0", port=PORT)
