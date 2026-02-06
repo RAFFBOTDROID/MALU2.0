@@ -46,11 +46,15 @@ asyncio.set_event_loop(loop)
 # ======================
 # IA RESPONSE
 # ======================
+from groq import Groq
+
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
 async def gerar_resposta_ia(msg):
     try:
         res = await asyncio.to_thread(
             client.chat.completions.create,
-            model="gpt-4o-mini",
+            model="llama3-70b-8192",
             messages=[
                 {"role": "system", "content": MALU_SYSTEM_PROMPT},
                 {"role": "user", "content": msg}
@@ -58,12 +62,10 @@ async def gerar_resposta_ia(msg):
             temperature=0.8,
             max_tokens=300
         )
-
         return res.choices[0].message.content.strip()
-
     except Exception as e:
         print("Erro IA:", e)
-        return "💖 Oops… minha cabecinha bugou 😅 tenta de novo?"
+        return "💖 Oops… buguei um pouquinho 😅 tenta de novo?"
 
 # ======================
 # HANDLERS
