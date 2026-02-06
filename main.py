@@ -20,9 +20,9 @@ logging.basicConfig(level=logging.INFO)
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
 
-# MODELOS COMPATÍVEIS COM SUA API (SEM ERRO 404)
+# MODELO FUNCIONAL FREE (SEM 404)
 MODEL_PRIORITY = [
-    "models/gemini-pro"
+    "models/gemini-1.0-pro"
 ]
 
 SYSTEM_PROMPT = """
@@ -56,7 +56,7 @@ def generate_with_fallback(prompt):
         except Exception as e:
             logging.warning(f"⚠️ Falhou {model_name}: {e}")
 
-    return "Buguei por um segundo 😅 tenta de novo."
+    return "Buguei um pouquinho 😅 tenta de novo."
 
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
@@ -94,7 +94,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("Buguei um pouquinho 😅 tenta de novo.")
+        await update.message.reply_text("Buguei 😅 tenta de novo.")
 
 # ================= FLASK KEEP ALIVE =================
 app_flask = Flask("ping")
@@ -115,7 +115,7 @@ def main():
 
     Thread(target=run_flask).start()
 
-    print("✅ Malu rodando com Gemini + Telegram + Render")
+    print("✅ Malu rodando com Gemini FREE + Telegram + Render")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
