@@ -40,21 +40,15 @@ def save_memory(user_id, text):
     memory.setdefault(user_id, [])
     memory[user_id].append(text)
     memory[user_id] = memory[user_id][-6:]
-    logging.info(f"💾 Memória de {user_id}: {memory[user_id]}")
 
 def generate_with_fallback(prompt):
     for model_name in MODEL_PRIORITY:
         try:
-            logging.info(f"⚡ Gerando resposta com {model_name}...")
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(
                 prompt,
-                generation_config={
-                    "temperature": 0.85,
-                    "max_output_tokens": 300
-                }
+                generation_config={"temperature": 0.85, "max_output_tokens": 300}
             )
-            logging.info(f"✅ Resposta recebida: {response.text.strip()}")
             return response.text.strip()
         except Exception as e:
             logging.warning(f"⚠️ Falhou {model_name}: {e}")
@@ -70,57 +64,46 @@ Histórico:
 Usuário: {text}
 Malu:
 """
-    logging.info(f"📝 Prompt enviado à Gemini:\n{prompt}")
     return generate_with_fallback(prompt)
 
 # ================= TELEGRAM =================
 telegram_app = Application.builder().token(TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info(f"👋 Comando /start de {update.message.from_user.id}")
     await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.text:
-            logging.info("⚠️ Mensagem vazia ou inexistente")
             return
 
         text = update.message.text.strip()
         user_id = update.message.from_user.id
         chat_type = update.message.chat.type
-        logging.info(f"💬 Msg recebida ({chat_type}) de {user_id}: {text}")
+
+        logging.info(f"💬 Msg recebida ({chat_type}) de {update.message.from_user.username}: {text}")
 
         # Ignora comandos
         if text.startswith("/"):
-            logging.info("⛔ Ignorando comando")
             return
 
         # ================= GRUPO =================
         if chat_type in ["group", "supergroup"]:
             bot_username = (context.bot.username or "").lower()
+            text_lower = text.lower()
 
-            mentioned_in_text = f"@{bot_username}" in text.lower()
-            mentioned_in_entities = False
-            if update.message.entities:
-                for ent in update.message.entities:
-                    if ent.type == "mention":
-                        mention_text = text[ent.offset: ent.offset + ent.length].lower()
-                        if bot_username in mention_text:
-                            mentioned_in_entities = True
+            # Verifica se mencionou @botusername
+            mentioned = f"@{bot_username}" in text_lower
 
+            # Verifica se respondeu à Malu
             replied_to_bot = (
                 update.message.reply_to_message
                 and update.message.reply_to_message.from_user
-                and update.message.reply_to_message.from_user.is_bot
+                and update.message.reply_to_message.from_user.id == context.bot.id
             )
 
-            logging.info(f"🔹 Mention text: {mentioned_in_text}")
-            logging.info(f"🔹 Mention entity: {mentioned_in_entities}")
-            logging.info(f"🔹 Replied to bot: {replied_to_bot}")
-
-            if not mentioned_in_text and not mentioned_in_entities and not replied_to_bot:
-                logging.info("⛔ Ignorando mensagem do grupo (não mencionado nem reply)")
+            if not mentioned and not replied_to_bot:
+                logging.info("⛔ Ignorando mensagem do grupo (não mencionou nem respondeu ao bot)")
                 return
 
         # ================= SALVAR MEMÓRIA =================
@@ -128,6 +111,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ================= RESPONDER =================
         reply = ask_malu(user_id, text)
+        logging.info(f"✅ Respondendo: {reply}")
         await update.message.reply_text(reply)
 
     except Exception:
@@ -154,10 +138,7 @@ def webhook():
         data = request.get_json(force=True)
         logging.info("📩 Update recebido")
         update = Update.de_json(data, telegram_app.bot)
-        asyncio.run_coroutine_threadsafe(
-            telegram_app.process_update(update),
-            loop
-        )
+        asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), loop)
     except Exception:
         logging.exception("🔥 ERRO COMPLETO NO WEBHOOK")
     return "ok", 200
@@ -167,11 +148,8 @@ async def setup():
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-    await telegram_app.bot.set_webhook(
-        url=WEBHOOK_URL,
-        allowed_updates=["message"]
-    )
-    logging.info(f"✅ Webhook ativo: {WEBHOOK_URL}")
+    await telegram_app.bot.set_webhook(url=WEBHOOK_URL, allowed_updates=["message"])
+    print(f"✅ Webhook ativo: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
     loop.run_until_complete(setup())
