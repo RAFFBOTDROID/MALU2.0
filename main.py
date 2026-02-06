@@ -2,20 +2,20 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from groq import Groq
+import google.generativeai as genai
 
 # =========================
 # CONFIG
 # =========================
 TOKEN = os.getenv("BOT_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")  # API Key do Google Gemini Free
 
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN não encontrado")
-if not GROQ_API_KEY:
-    raise RuntimeError("❌ GROQ_API_KEY não encontrado")
+if not GENAI_API_KEY:
+    raise RuntimeError("❌ GENAI_API_KEY não encontrado")
 
-client = Groq(api_key=GROQ_API_KEY)
+genai.api_key = GENAI_API_KEY
 
 logging.basicConfig(level=logging.INFO)
 
@@ -50,24 +50,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # =========================
-# IA GROQ RESPONSE
+# IA GEMINI RESPONSE
 # =========================
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Histórico:\n{history}\n\nUsuário: {text}"}
-    ]
+    # Mensagem completa
+    prompt = f"{SYSTEM_PROMPT}\nHistórico:\n{history}\n\nUsuário: {text}\nMalu:"
 
-    completion = client.chat.completions.create(
-        model="llama3-70b-8192",
-        messages=messages,
+    response = genai.chat.create(
+        model="gemini-1.5",  # Modelo gratuito Gemini Free
+        messages=[{"author": "user", "content": prompt}],
         temperature=0.8,
-        max_tokens=200,
+        max_output_tokens=200
     )
 
-    return completion.choices[0].message.content.strip()
+    # O retorno do Gemini Free vem em response.last
+    return response.last if hasattr(response, "last") else response.output[0].content
 
 # =========================
 # RESPONDER AUTOMÁTICO
@@ -76,7 +75,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
-    text = update.message.text.lower()
+    text = update.message.text.strip()
     user_id = update.message.from_user.id
 
     # Ignorar comandos
@@ -89,6 +88,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = ask_malu(user_id, text)
         await update.message.reply_text(reply)
     except Exception as e:
+        logging.error(e)
         await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
 
 # =========================
@@ -100,7 +100,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-    print("✅ Malu está online...")
+    print("✅ Malu está online com Gemini Free...")
     app.run_polling()
 
 if __name__ == "__main__":
