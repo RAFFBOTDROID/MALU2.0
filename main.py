@@ -1,128 +1,62 @@
 import os
-import logging
-import asyncio
-from fastapi import FastAPI, Request
+import requests
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
-# ================= CONFIG =================
-TOKEN = os.getenv("BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT = int(os.environ.get("PORT", 8080))
+# --- CONFIGURAÇÃO ---
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+MODEL = "meta-llama/llama-3.2-3b-instruct:free"  # modelo gratuito
 
-if not TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN não encontrado")
-if not GEMINI_API_KEY:
-    raise RuntimeError("❌ GEMINI_API_KEY não encontrado")
-if not WEBHOOK_URL:
-    raise RuntimeError("❌ WEBHOOK_URL não encontrado")
+# Endpoint do OpenRouter para chat
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-logging.basicConfig(level=logging.INFO)
+# --- FUNÇÃO DE CHAMADA À API ---
+def gerar_resposta_ia(prompt):
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": "Você é a Manu, um bot alegre, simpático, carinhoso e natural."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 200,
+        "temperature": 0.7
+    }
+    response = requests.post(OPENROUTER_URL, json=data, headers=headers)
+    if response.status_code == 200:
+        resposta = response.json()
+        return resposta["choices"][0]["message"]["content"]
+    else:
+        return "Desculpa, deu um errinho 😅 tente novamente."
 
-# ================= GEMINI =================
-genai.configure(api_key=GEMINI_API_KEY)
-MODEL_PRIORITY = ["models/gemini-1.5-flash"]
+# --- FUNÇÃO QUE TRATA AS MENSAGENS ---
+async def processar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
 
-SYSTEM_PROMPT = """
-Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
-Fale como uma garota brasileira real, natural, carismática e envolvente.
-Responda curto quando possível.
-Nunca diga que é um modelo de IA.
-Nunca diga que é um bot.
-Seja charmosa, leve, engraçada e um pouco provocante.
-"""
-
-memory = {}
-
-def save_memory(user_id, text):
-    memory.setdefault(user_id, [])
-    memory[user_id].append(text)
-    memory[user_id] = memory[user_id][-6:]
-
-def generate_with_fallback(prompt):
-    for model_name in MODEL_PRIORITY:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(
-                prompt,
-                generation_config={"temperature": 0.85, "max_output_tokens": 300}
-            )
-            return response.text.strip()
-        except Exception as e:
-            logging.warning(f"⚠️ Falhou {model_name}: {e}")
-    return "Buguei 😅 tenta de novo."
-
-def ask_malu(user_id, text):
-    history = "\n".join(memory.get(user_id, []))
-    prompt = f"""{SYSTEM_PROMPT}
-
-Histórico:
-{history}
-
-Usuário: {text}
-Malu:
-"""
-    return generate_with_fallback(prompt)
-
-# ================= TELEGRAM =================
-telegram_app = Application.builder().token(TOKEN).build()
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
-
-async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
+    # Ignora se é uma resposta (*reply*) para outro membro
+    if msg.reply_to_message:
         return
 
-    text = update.message.text.strip()
-    user_id = update.message.from_user.id
-    chat_type = update.message.chat.type
-    logging.info(f"💬 Msg recebida ({chat_type}): {text}")
+    texto = msg.text.strip()
+    # Apenas responde se houver texto
+    if texto:
+        # Gera resposta da IA
+        reply = gerar_resposta_ia(texto)
+        await msg.reply_text(reply)
 
-    if text.startswith("/"):
-        return
+# --- INICIALIZAÇÃO DO BOT ---
+async def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Responde em grupos somente se mencionado ou respondido
-    if chat_type in ["group", "supergroup"]:
-        bot_username = (context.bot.username or "").lower()
-        mentioned_in_text = f"@{bot_username}" in text.lower()
-        replied_to_bot = (
-            update.message.reply_to_message
-            and update.message.reply_to_message.from_user
-            and update.message.reply_to_message.from_user.is_bot
-        )
-        if not mentioned_in_text and not replied_to_bot:
-            return
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), processar_mensagem))
 
-    save_memory(user_id, text)
-    reply = ask_malu(user_id, text)
-    await update.message.reply_text(reply)
+    print("Manu está online! 🤖💖")
+    await app.run_polling()
 
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
-
-# ================= FASTAPI =================
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return {"status": "Malu online 😘"}
-
-@app.post("/webhook")
-async def telegram_webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, telegram_app.bot)
-    await telegram_app.process_update(update)
-    return {"ok": True}
-
-# ================= STARTUP =================
-async def setup():
-    await telegram_app.initialize()
-    await telegram_app.start()
-    await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-    await telegram_app.bot.set_webhook(url=WEBHOOK_URL, allowed_updates=["message"])
-    print(f"✅ Webhook ativo: {WEBHOOK_URL}")
-
-asyncio.run(setup())
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
