@@ -12,8 +12,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 PORT = int(os.environ.get("PORT", 8080))
 
-if not TOKEN or not GEMINI_API_KEY or not WEBHOOK_URL:
-    raise RuntimeError("❌ Faltando variável de ambiente (BOT_TOKEN, GEMINI_API_KEY, WEBHOOK_URL)")
+if not TOKEN:
+    raise RuntimeError("❌ BOT_TOKEN não encontrado")
+if not GEMINI_API_KEY:
+    raise RuntimeError("❌ GEMINI_API_KEY não encontrado")
+if not WEBHOOK_URL:
+    raise RuntimeError("❌ WEBHOOK_URL não encontrado")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,7 +47,10 @@ def generate_with_fallback(prompt):
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(
                 prompt,
-                generation_config={"temperature": 0.85, "max_output_tokens": 300}
+                generation_config={
+                    "temperature": 0.85,
+                    "max_output_tokens": 300
+                }
             )
             return response.text.strip()
         except Exception as e:
@@ -76,12 +83,14 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.text.strip()
         user_id = update.message.from_user.id
         chat_type = update.message.chat.type
+
         logging.info(f"💬 Msg recebida ({chat_type}): {text}")
 
+        # Ignora comandos
         if text.startswith("/"):
             return
 
-        # GRUPOS: responder só se mencionar ou reply
+        # GRUPO: só responde se mencionar ou reply no bot
         if chat_type in ["group", "supergroup"]:
             bot_username = (context.bot.username or "").lower()
             mentioned = f"@{bot_username}" in text.lower()
@@ -104,9 +113,6 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-# ================= EVENT LOOP =================
-loop = asyncio.get_event_loop()
-
 # ================= FLASK =================
 flask_app = Flask(__name__)
 
@@ -118,8 +124,10 @@ def home():
 def webhook():
     try:
         data = request.get_json(force=True)
+        logging.info("📩 Update recebido")
         update = Update.de_json(data, telegram_app.bot)
-        asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), loop)
+        # Processa diretamente sem depender de loop separado
+        asyncio.run(telegram_app.process_update(update))
     except Exception:
         logging.exception("🔥 ERRO COMPLETO NO WEBHOOK")
     return "ok", 200
@@ -128,12 +136,16 @@ def webhook():
 async def setup():
     await telegram_app.initialize()
     await telegram_app.start()
+    # Remove webhook antigo e registra o novo
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-    await telegram_app.bot.set_webhook(url=WEBHOOK_URL, allowed_updates=["message"])
+    await telegram_app.bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=["message"]
+    )
     print(f"✅ Webhook ativo: {WEBHOOK_URL}")
 
-loop.run_until_complete(setup())
-
-# ================= OBS =================
-# Não rodar flask_app.run()! Render vai usar gunicorn:
-# gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:flask_app --bind 0.0.0.0:$PORT
+if __name__ == "__main__":
+    # Configura bot + webhook antes de rodar Flask
+    asyncio.run(setup())
+    # Rode Flask normalmente
+    flask_app.run(host="0.0.0.0", port=PORT)
