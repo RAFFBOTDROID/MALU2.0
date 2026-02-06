@@ -4,7 +4,7 @@ from flask import Flask
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+from google import genai
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
@@ -18,16 +18,14 @@ if not GEMINI_API_KEY:
 logging.basicConfig(level=logging.INFO)
 
 # ================= GEMINI =================
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """
 Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
-Fale como uma garota brasileira real, natural, carismática e envolvente.
-Responda curto quando possível.
+Fale como uma garota brasileira real, carismática e envolvente.
 Nunca diga que é um modelo de IA.
 Nunca diga que é um bot.
-Seja divertida, charmosa e um pouco provocante.
+Responda curto quando possível.
 """
 
 memory = {}
@@ -47,9 +45,10 @@ Histórico:
 Usuário: {text}
 Malu:"""
 
-    response = model.generate_content(
-        prompt,
-        generation_config={
+    response = client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=prompt,
+        config={
             "temperature": 0.8,
             "max_output_tokens": 250
         }
@@ -59,7 +58,7 @@ Malu:"""
 
 # ================= BOT =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi 😘 eu sou a Malu. Pode falar comigo naturalmente.")
+    await update.message.reply_text("Oi 😘 eu sou a Malu. Pode falar comigo.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -78,7 +77,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
+        await update.message.reply_text("Buguei um pouquinho 😅 tenta de novo.")
 
 # ================= FLASK KEEP ALIVE =================
 app_flask = Flask("ping")
