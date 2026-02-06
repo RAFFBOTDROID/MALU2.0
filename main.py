@@ -2,20 +2,20 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+from google import genai
 
 # =========================
 # CONFIG
 # =========================
 TOKEN = os.getenv("BOT_TOKEN")
-GENAI_API_KEY = os.getenv("GENAI_API_KEY")  # API Key do Google Gemini Free
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")  # API Key Gemini Free
 
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN não encontrado")
 if not GENAI_API_KEY:
     raise RuntimeError("❌ GENAI_API_KEY não encontrado")
 
-genai.api_key = GENAI_API_KEY
+genai.configure(api_key=GENAI_API_KEY)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,6 +39,7 @@ memory = {}
 def save_memory(user_id, text):
     memory.setdefault(user_id, [])
     memory[user_id].append(text)
+    # Mantém só as últimas 6 mensagens
     memory[user_id] = memory[user_id][-6:]
 
 # =========================
@@ -55,18 +56,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
 
-    # Mensagem completa
     prompt = f"{SYSTEM_PROMPT}\nHistórico:\n{history}\n\nUsuário: {text}\nMalu:"
 
-    response = genai.chat.create(
-        model="gemini-1.5",  # Modelo gratuito Gemini Free
-        messages=[{"author": "user", "content": prompt}],
+    response = genai.ChatCompletion.create(
+        model="gemini-1.5",               # Modelo Gemini Free
+        messages=[{"author":"user","content":prompt}],
         temperature=0.8,
         max_output_tokens=200
     )
 
-    # O retorno do Gemini Free vem em response.last
-    return response.last if hasattr(response, "last") else response.output[0].content
+    # Retorna o texto da IA
+    return response.choices[0].message.content.strip()
 
 # =========================
 # RESPONDER AUTOMÁTICO
