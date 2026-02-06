@@ -1,5 +1,7 @@
 import os
 import logging
+from flask import Flask
+from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
@@ -8,14 +10,12 @@ from google import genai
 # CONFIG
 # =========================
 TOKEN = os.getenv("BOT_TOKEN")
-GENAI_API_KEY = os.getenv("GENAI_API_KEY")  # API Key Gemini Free
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")  # Gemini Free
 
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN não encontrado")
 if not GENAI_API_KEY:
     raise RuntimeError("❌ GENAI_API_KEY não encontrado")
-
-genai.configure(api_key=GENAI_API_KEY)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,38 +39,30 @@ memory = {}
 def save_memory(user_id, text):
     memory.setdefault(user_id, [])
     memory[user_id].append(text)
-    # Mantém só as últimas 6 mensagens
     memory[user_id] = memory[user_id][-6:]
 
 # =========================
-# START
+# TELEGRAM BOT HANDLERS
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Oi 😘 eu sou a Malu. Pode falar comigo naturalmente."
     )
 
-# =========================
-# IA GEMINI RESPONSE
-# =========================
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
-
     prompt = f"{SYSTEM_PROMPT}\nHistórico:\n{history}\n\nUsuário: {text}\nMalu:"
 
     response = genai.ChatCompletion.create(
-        model="gemini-1.5",               # Modelo Gemini Free
+        model="gemini-1.5",
         messages=[{"author":"user","content":prompt}],
         temperature=0.8,
-        max_output_tokens=200
+        max_output_tokens=200,
+        api_key=GENAI_API_KEY
     )
 
-    # Retorna o texto da IA
     return response.choices[0].message.content.strip()
 
-# =========================
-# RESPONDER AUTOMÁTICO
-# =========================
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -78,7 +70,6 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     user_id = update.message.from_user.id
 
-    # Ignorar comandos
     if text.startswith("/"):
         return
 
@@ -92,15 +83,30 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
 
 # =========================
-# MAIN
+# FLASK PING SERVER (Evita hibernação)
+# =========================
+app_flask = Flask("ping_server")
+
+@app_flask.route("/ping")
+def ping():
+    return "Malu está viva 😘", 200
+
+def run_flask():
+    app_flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+# =========================
+# MAIN TELEGRAM BOT
 # =========================
 def main():
+    # Inicializa Telegram bot
     app = Application.builder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-    print("✅ Malu está online com Gemini Free...")
+    # Start Flask server em outra thread
+    Thread(target=run_flask).start()
+
+    print("✅ Malu está online com Gemini Free e ping server...")
     app.run_polling()
 
 if __name__ == "__main__":
