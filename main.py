@@ -2,7 +2,7 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.genai as genai  # atualizado
+import google.generativeai as genai
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
