@@ -1,5 +1,6 @@
 import os
 import logging
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import google.generativeai as genai
@@ -7,18 +8,21 @@ import google.generativeai as genai
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # EX: https://seuapp.onrender.com/webhook
 
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN não encontrado")
 if not GEMINI_API_KEY:
     raise RuntimeError("❌ GEMINI_API_KEY não encontrado")
+if not WEBHOOK_URL:
+    raise RuntimeError("❌ WEBHOOK_URL não encontrado")
 
 logging.basicConfig(level=logging.INFO)
 
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
 
-MODEL_PRIORITY = ["models/gemini-1.0-pro"]
+MODEL_PRIORITY = ["models/gemini-1.5-flash"]
 
 SYSTEM_PROMPT = """
 Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
@@ -90,16 +94,35 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(e)
         await update.message.reply_text("Buguei 😅 tenta de novo.")
 
+# ================= TELEGRAM APP =================
+telegram_app = Application.builder().token(TOKEN).build()
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
+
+# ================= FLASK WEBHOOK SERVER =================
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "Malu online 😘", 200
+
+@flask_app.route("/webhook", methods=["POST"])
+async def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, telegram_app.bot)
+    await telegram_app.process_update(update)
+    return "ok", 200
+
 # ================= MAIN =================
-def main():
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
-
-    print("✅ Malu rodando com Gemini FREE + Telegram + Render")
-
-    app.run_polling(drop_pending_updates=True)
+async def setup_webhook():
+    await telegram_app.initialize()
+    await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+    print(f"✅ Webhook setado em: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+
+    asyncio.run(setup_webhook())
+
+    port = int(os.environ.get("PORT", 8080))
+    flask_app.run(host="0.0.0.0", port=port)
