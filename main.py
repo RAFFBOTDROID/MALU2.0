@@ -20,10 +20,9 @@ logging.basicConfig(level=logging.INFO)
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
 
-# MODELOS VÁLIDOS (API ATUAL)
+# MODELOS COMPATÍVEIS COM SUA API (SEM ERRO 404)
 MODEL_PRIORITY = [
-    "gemini-1.5-flash",  # rápido
-    "gemini-1.5-pro"     # mais inteligente
+    "models/gemini-pro"
 ]
 
 SYSTEM_PROMPT = """
@@ -57,7 +56,7 @@ def generate_with_fallback(prompt):
         except Exception as e:
             logging.warning(f"⚠️ Falhou {model_name}: {e}")
 
-    return "Tive um bug mental agora 😅 tenta de novo."
+    return "Buguei por um segundo 😅 tenta de novo."
 
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
@@ -76,7 +75,7 @@ Malu:
 
 # ================= BOT =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo naturalmente.")
+    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
