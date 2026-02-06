@@ -97,10 +97,14 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if chat_type in ["group", "supergroup"]:
             bot_username = context.bot.username.lower()
 
-            if (
-                f"@{bot_username}" not in text.lower()
-                and not update.message.reply_to_message
-            ):
+            mentioned = f"@{bot_username}" in text.lower()
+            replied_to_bot = (
+                update.message.reply_to_message
+                and update.message.reply_to_message.from_user
+                and update.message.reply_to_message.from_user.username == context.bot.username
+            )
+
+            if not mentioned and not replied_to_bot:
                 return
 
         save_memory(user_id, text)
@@ -131,7 +135,7 @@ def webhook():
     try:
         data = request.get_json(force=True)
 
-        logging.info(f"📩 Update recebido: {data}")
+        logging.info(f"📩 Update recebido")
 
         update = Update.de_json(data, telegram_app.bot)
 
