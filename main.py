@@ -111,22 +111,22 @@ flask_app = Flask(__name__)
 def home():
     return "Malu online 😘", 200
 
-
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
     try:
         data = request.get_json(force=True)
+
+        logging.info(f"📩 Update recebido: {data}")
+
         update = Update.de_json(data, telegram_app.bot)
 
-        future = asyncio.run_coroutine_threadsafe(
+        asyncio.run_coroutine_threadsafe(
             telegram_app.process_update(update),
             loop
         )
 
-        future.result(timeout=5)
-
-    except Exception as e:
-        logging.error(f"Webhook error: {e}")
+    except Exception:
+        logging.exception("🔥 ERRO COMPLETO NO WEBHOOK")
 
     return "ok", 200
 
@@ -136,7 +136,10 @@ async def setup():
     await telegram_app.start()
 
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-    await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+    await telegram_app.bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=["message", "callback_query"]
+    )
 
     print(f"✅ Webhook ativo: {WEBHOOK_URL}")
 
