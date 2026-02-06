@@ -1,4 +1,2 @@
-fastapi
-uvicorn
 python-telegram-bot==20.5
-google-generativeai
+requests==2.31.0
