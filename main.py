@@ -2,21 +2,26 @@ import os
 import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+import google.genai as genai  # atualizado
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT = int(os.environ.get("PORT", 8080))
+PORT = int(os.environ.get("PORT", 8443))  # PTB webhook padrão
 
-if not TOKEN or not GEMINI_API_KEY or not WEBHOOK_URL:
-    raise RuntimeError("❌ Faltando configuração")
+if not TOKEN:
+    raise RuntimeError("❌ BOT_TOKEN não encontrado")
+if not GEMINI_API_KEY:
+    raise RuntimeError("❌ GEMINI_API_KEY não encontrado")
+if not WEBHOOK_URL:
+    raise RuntimeError("❌ WEBHOOK_URL não encontrado")
 
 logging.basicConfig(level=logging.INFO)
 
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
+
 MODEL_PRIORITY = ["models/gemini-1.5-flash"]
 
 SYSTEM_PROMPT = """
@@ -38,9 +43,11 @@ def save_memory(user_id, text):
 def generate_with_fallback(prompt):
     for model_name in MODEL_PRIORITY:
         try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(
-                prompt, generation_config={"temperature": 0.85, "max_output_tokens": 300}
+            model = genai.models.get(model_name)
+            response = model.generate_text(
+                prompt,
+                temperature=0.85,
+                max_output_tokens=300
             )
             return response.text.strip()
         except Exception as e:
@@ -49,7 +56,14 @@ def generate_with_fallback(prompt):
 
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
-    prompt = f"{SYSTEM_PROMPT}\nHistórico:\n{history}\nUsuário: {text}\nMalu:"
+    prompt = f"""{SYSTEM_PROMPT}
+
+Histórico:
+{history}
+
+Usuário: {text}
+Malu:
+"""
     return generate_with_fallback(prompt)
 
 # ================= TELEGRAM =================
@@ -59,45 +73,48 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-
-    text = update.message.text.strip()
-    user_id = update.message.from_user.id
-    chat_type = update.message.chat.type
-
-    logging.info(f"💬 Msg recebida ({chat_type}) de {update.message.from_user.username}: {text}")
-
-    # Ignora comandos
-    if text.startswith("/"):
-        return
-
-    # Em grupos: responder só se mencionar ou reply
-    if chat_type in ["group", "supergroup"]:
-        bot_username = (context.bot.username or "").lower()
-        mentioned = f"@{bot_username}" in text.lower()
-        replied_to_bot = (
-            update.message.reply_to_message
-            and update.message.reply_to_message.from_user
-            and update.message.reply_to_message.from_user.id == context.bot.id
-        )
-        if not mentioned and not replied_to_bot:
-            logging.info("⛔ Ignorando mensagem do grupo")
+    try:
+        if not update.message or not update.message.text:
             return
 
-    save_memory(user_id, text)
-    reply = ask_malu(user_id, text)
-    logging.info(f"✅ Respondendo: {reply}")
-    await update.message.reply_text(reply)
+        text = update.message.text.strip()
+        user_id = update.message.from_user.id
+        chat_type = update.message.chat.type
+
+        logging.info(f"💬 Msg recebida ({chat_type}): {text}")
+
+        # Ignora comandos
+        if text.startswith("/"):
+            return
+
+        # Grupos: só responde se mencionado ou respondido
+        if chat_type in ["group", "supergroup"]:
+            bot_username = (context.bot.username or "").lower()
+            mentioned = f"@{bot_username}" in text.lower()
+            replied_to_bot = (
+                update.message.reply_to_message
+                and update.message.reply_to_message.from_user
+                and update.message.reply_to_message.from_user.is_bot
+            )
+            if not mentioned and not replied_to_bot:
+                return
+
+        save_memory(user_id, text)
+        reply = ask_malu(user_id, text)
+        await update.message.reply_text(reply)
+
+    except Exception:
+        logging.exception("🔥 ERRO NA RESPOSTA")
+        await update.message.reply_text("Buguei 😅 tenta de novo.")
 
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-# ================= START BOT COM WEBHOOK =================
+# ================= START WEBHOOK =================
 if __name__ == "__main__":
     telegram_app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
-        webhook_url=WEBHOOK_URL,
-        drop_pending_updates=True,
+        url_path=TOKEN,
+        webhook_url=f"{WEBHOOK_URL}/{TOKEN}"
     )
