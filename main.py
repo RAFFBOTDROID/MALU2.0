@@ -1,5 +1,7 @@
 import os
 import logging
+import asyncio
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import google.generativeai as genai
@@ -8,20 +10,15 @@ import google.generativeai as genai
 TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-PORT = int(os.environ.get("PORT", 8443))  # PTB webhook padrão
+PORT = int(os.environ.get("PORT", 8080))
 
-if not TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN não encontrado")
-if not GEMINI_API_KEY:
-    raise RuntimeError("❌ GEMINI_API_KEY não encontrado")
-if not WEBHOOK_URL:
-    raise RuntimeError("❌ WEBHOOK_URL não encontrado")
+if not TOKEN or not GEMINI_API_KEY or not WEBHOOK_URL:
+    raise RuntimeError("❌ Verifique BOT_TOKEN, GEMINI_API_KEY e WEBHOOK_URL")
 
 logging.basicConfig(level=logging.INFO)
 
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
-
 MODEL_PRIORITY = ["models/gemini-1.5-flash"]
 
 SYSTEM_PROMPT = """
@@ -43,11 +40,10 @@ def save_memory(user_id, text):
 def generate_with_fallback(prompt):
     for model_name in MODEL_PRIORITY:
         try:
-            model = genai.models.get(model_name)
-            response = model.generate_text(
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
                 prompt,
-                temperature=0.85,
-                max_output_tokens=300
+                generation_config={"temperature": 0.85, "max_output_tokens": 300}
             )
             return response.text.strip()
         except Exception as e:
@@ -56,14 +52,7 @@ def generate_with_fallback(prompt):
 
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
-    prompt = f"""{SYSTEM_PROMPT}
-
-Histórico:
-{history}
-
-Usuário: {text}
-Malu:
-"""
+    prompt = f"{SYSTEM_PROMPT}\nHistórico:\n{history}\nUsuário: {text}\nMalu:"
     return generate_with_fallback(prompt)
 
 # ================= TELEGRAM =================
@@ -87,7 +76,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text.startswith("/"):
             return
 
-        # Grupos: só responde se mencionado ou respondido
+        # Grupos: responde apenas se mencionar ou responder ao bot
         if chat_type in ["group", "supergroup"]:
             bot_username = (context.bot.username or "").lower()
             mentioned = f"@{bot_username}" in text.lower()
@@ -110,11 +99,31 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-# ================= START WEBHOOK =================
+# ================= FLASK =================
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "Malu online 😘", 200
+
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    try:
+        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+        asyncio.get_event_loop().create_task(telegram_app.process_update(update))
+        logging.info("📩 Update processado com sucesso")
+    except Exception:
+        logging.exception("🔥 ERRO NO WEBHOOK")
+    return "ok", 200
+
+# ================= STARTUP =================
+async def setup():
+    await telegram_app.initialize()
+    await telegram_app.start()
+    await telegram_app.bot.delete_webhook(drop_pending_updates=True)
+    await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+    logging.info(f"✅ Webhook ativo: {WEBHOOK_URL}")
+
 if __name__ == "__main__":
-    telegram_app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=TOKEN,
-        webhook_url=f"{WEBHOOK_URL}/{TOKEN}"
-    )
+    asyncio.run(setup())
+    flask_app.run(host="0.0.0.0", port=PORT)
