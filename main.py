@@ -20,10 +20,10 @@ logging.basicConfig(level=logging.INFO)
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Modelos válidos (API nova)
+# Ordem de fallback (se falhar, tenta outro)
 MODEL_PRIORITY = [
-    "models/gemini-1.5-flash",  # rápido
-    "models/gemini-1.5-pro"     # mais inteligente
+    "gemini-1.5-flash",  # rápido
+    "gemini-1.5-pro"     # mais inteligente
 ]
 
 SYSTEM_PROMPT = """
@@ -45,7 +45,7 @@ def save_memory(user_id, text):
 def generate_with_fallback(prompt):
     for model_name in MODEL_PRIORITY:
         try:
-            model = genai.GenerativeModel(model=model_name)
+            model = genai.GenerativeModel(model_name)
             response = model.generate_content(
                 prompt,
                 generation_config={
@@ -57,7 +57,7 @@ def generate_with_fallback(prompt):
         except Exception as e:
             logging.warning(f"⚠️ Falhou {model_name}: {e}")
 
-    return "Deu um bug aqui 😅 tenta de novo."
+    return "Tive um bug mental agora 😅 tenta de novo."
 
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
