@@ -1,4 +1,4 @@
-Flask
-python-telegram-bot==20.4
+fastapi
+uvicorn
+python-telegram-bot==20.5
 google-generativeai
-gunicorn
