@@ -1,131 +1,107 @@
 import os
-import asyncio
-from flask import Flask, request
+import logging
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from openai import OpenAI
-
-# ======================
-# ENV
-# ======================
-TOKEN = os.getenv("BOT_TOKEN")
-PORT = int(os.getenv("PORT", 10000))
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
-
-if not TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN não definido")
-
-if not OPENAI_KEY:
-    raise RuntimeError("❌ OPENAI_API_KEY não definida")
-
-client = OpenAI(api_key=OPENAI_KEY)
-
-# ======================
-# TELEGRAM APP
-# ======================
-application = Application.builder().token(TOKEN).build()
-
-# ======================
-# PERSONALIDADE MALU
-# ======================
-MALU_SYSTEM_PROMPT = """
-Você é Malu Ultra Elite 💖
-Uma garota virtual carismática, inteligente, divertida e gentil.
-Fale de forma humana, calorosa, amigável, com emojis leves.
-Não diga que é IA.
-Responda naturalmente como uma pessoa real.
-"""
-
-# ======================
-# EVENT LOOP GLOBAL FIX
-# ======================
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
-# ======================
-# IA RESPONSE
-# ======================
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from groq import Groq
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# =========================
+# CONFIG
+# =========================
+TOKEN = os.getenv("BOT_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-async def gerar_resposta_ia(msg):
-    try:
-        res = await asyncio.to_thread(
-            client.chat.completions.create,
-            model="llama3-70b-8192",
-            messages=[
-                {"role": "system", "content": MALU_SYSTEM_PROMPT},
-                {"role": "user", "content": msg}
-            ],
-            temperature=0.8,
-            max_tokens=300
-        )
-        return res.choices[0].message.content.strip()
-    except Exception as e:
-        print("Erro IA:", e)
-        return "💖 Oops… buguei um pouquinho 😅 tenta de novo?"
+if not TOKEN:
+    raise RuntimeError("❌ BOT_TOKEN não encontrado")
+if not GROQ_API_KEY:
+    raise RuntimeError("❌ GROQ_API_KEY não encontrado")
 
-# ======================
-# HANDLERS
-# ======================
+client = Groq(api_key=GROQ_API_KEY)
+
+logging.basicConfig(level=logging.INFO)
+
+# =========================
+# PERSONALIDADE DA MALU
+# =========================
+SYSTEM_PROMPT = """
+Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
+Fale de forma natural, amigável, brasileira e descontraída.
+Responda curto quando possível.
+Nunca diga que é um modelo de IA.
+Nunca diga que é um bot.
+Seja carismática e envolvente.
+"""
+
+# =========================
+# MEMÓRIA SIMPLES
+# =========================
+memory = {}
+
+def save_memory(user_id, text):
+    memory.setdefault(user_id, [])
+    memory[user_id].append(text)
+    memory[user_id] = memory[user_id][-6:]
+
+# =========================
+# START
+# =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💖 Oii! Eu sou a Malu Ultra Elite — fala comigo!")
+    await update.message.reply_text(
+        "Oi 😘 eu sou a Malu. Pode falar comigo naturalmente."
+    )
 
-async def malu_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("📩 Mensagem recebida:", update.message.text)
+# =========================
+# IA GROQ RESPONSE
+# =========================
+def ask_malu(user_id, text):
+    history = "\n".join(memory.get(user_id, []))
 
-    text = update.message.text
-    if not text or text.startswith("/"):
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Histórico:\n{history}\n\nUsuário: {text}"}
+    ]
+
+    completion = client.chat.completions.create(
+        model="llama3-70b-8192",
+        messages=messages,
+        temperature=0.8,
+        max_tokens=200,
+    )
+
+    return completion.choices[0].message.content.strip()
+
+# =========================
+# RESPONDER AUTOMÁTICO
+# =========================
+async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
         return
 
-    resposta = await gerar_resposta_ia(text)
-    print("🤖 Resposta IA:", resposta)
+    text = update.message.text.lower()
+    user_id = update.message.from_user.id
 
-    await update.message.reply_text("💖 " + resposta)
+    # Ignorar comandos
+    if text.startswith("/"):
+        return
 
+    save_memory(user_id, text)
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_chat))
+    try:
+        reply = ask_malu(user_id, text)
+        await update.message.reply_text(reply)
+    except Exception as e:
+        await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
 
-# ======================
-# FLASK SERVER
-# ======================
-app = Flask(__name__)
+# =========================
+# MAIN
+# =========================
+def main():
+    app = Application.builder().token(TOKEN).build()
 
-@app.route("/")
-def home():
-    return "💖 Malu Ultra Elite ONLINE"
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-@app.route(f"/{TOKEN}", methods=["POST"])
-def telegram_webhook():
-    data = request.get_json(force=True)
+    print("✅ Malu está online...")
+    app.run_polling()
 
-    async def process():
-        update = Update.de_json(data, application.bot)
-        await application.process_update(update)
-
-    loop.create_task(process())
-    return "ok"
-
-# ======================
-# WEBHOOK SETUP
-# ======================
-async def setup():
-    await application.initialize()
-
-    if RENDER_URL:
-        webhook_url = f"{RENDER_URL}/{TOKEN}"
-        await application.bot.set_webhook(webhook_url)
-        print("✅ Webhook configurado:", webhook_url)
-
-# ======================
-# START SERVER
-# ======================
 if __name__ == "__main__":
-    print("💖 MALU ULTRA FIXA INICIANDO...")
-
-    loop.run_until_complete(setup())
-
-    app.run(host="0.0.0.0", port=PORT)
+    main()
