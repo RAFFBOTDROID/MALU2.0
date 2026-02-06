@@ -96,7 +96,6 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_re
 
 # ================= FLASK =================
 flask_app = Flask(__name__)
-loop = asyncio.get_event_loop()
 
 @flask_app.route("/")
 def home():
@@ -107,7 +106,9 @@ def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, telegram_app.bot)
 
-    loop.create_task(telegram_app.process_update(update))
+    asyncio.get_event_loop().create_task(
+        telegram_app.process_update(update)
+    )
 
     return "ok", 200
 
@@ -116,10 +117,10 @@ async def setup():
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
-
     print(f"✅ Webhook ativo em: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
     loop.run_until_complete(setup())
 
     port = int(os.environ.get("PORT", 8080))
