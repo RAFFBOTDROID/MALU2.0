@@ -10,6 +10,7 @@ import google.generativeai as genai
 TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.environ.get("PORT", 8080))
 
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN não encontrado")
@@ -71,7 +72,9 @@ Malu:
 """
     return generate_with_fallback(prompt)
 
-# ================= BOT =================
+# ================= TELEGRAM =================
+telegram_app = Application.builder().token(TOKEN).build()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
 
@@ -94,10 +97,12 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(e)
         await update.message.reply_text("Buguei 😅 tenta de novo.")
 
-# ================= TELEGRAM APP =================
-telegram_app = Application.builder().token(TOKEN).build()
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
+
+# ================= EVENT LOOP =================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 # ================= FLASK =================
 flask_app = Flask(__name__)
@@ -111,19 +116,24 @@ def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, telegram_app.bot)
 
-    asyncio.run(telegram_app.process_update(update))
+    asyncio.run_coroutine_threadsafe(
+        telegram_app.process_update(update),
+        loop
+    )
 
     return "ok", 200
 
-# ================= MAIN =================
+# ================= STARTUP =================
 async def setup():
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
-    print(f"✅ Webhook ativo em: {WEBHOOK_URL}")
+    print(f"✅ Webhook ativo: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
-    asyncio.run(setup())
+    loop.run_until_complete(setup())
 
-    port = int(os.environ.get("PORT", 8080))
-    flask_app.run(host="0.0.0.0", port=port)
+    flask_app.run(
+        host="0.0.0.0",
+        port=PORT
+    )
