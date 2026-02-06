@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Ordem de fallback (se falhar, tenta outro)
+# MODELOS VÁLIDOS (API ATUAL)
 MODEL_PRIORITY = [
     "gemini-1.5-flash",  # rápido
     "gemini-1.5-pro"     # mais inteligente
