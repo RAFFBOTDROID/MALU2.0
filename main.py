@@ -4,7 +4,7 @@ from flask import Flask
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from google import genai
+import google.generativeai as genai
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
@@ -18,14 +18,16 @@ if not GEMINI_API_KEY:
 logging.basicConfig(level=logging.INFO)
 
 # ================= GEMINI =================
-client = genai.Client(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-pro")
 
 SYSTEM_PROMPT = """
 Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
-Fale como uma garota brasileira real, carismática e envolvente.
+Fale como uma garota brasileira real, natural, carismática e envolvente.
+Responda curto quando possível.
 Nunca diga que é um modelo de IA.
 Nunca diga que é um bot.
-Responda curto quando possível.
+Seja charmosa, leve, engraçada e um pouco provocante.
 """
 
 memory = {}
@@ -37,19 +39,21 @@ def save_memory(user_id, text):
 
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
-    prompt = f"""{SYSTEM_PROMPT}
+
+    prompt = f"""
+{SYSTEM_PROMPT}
 
 Histórico:
 {history}
 
 Usuário: {text}
-Malu:"""
+Malu:
+"""
 
-    response = client.models.generate_content(
-        model="gemini-1.5-flash",
-        contents=prompt,
-        config={
-            "temperature": 0.8,
+    response = model.generate_content(
+        prompt,
+        generation_config={
+            "temperature": 0.85,
             "max_output_tokens": 250
         }
     )
@@ -58,7 +62,7 @@ Malu:"""
 
 # ================= BOT =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi 😘 eu sou a Malu. Pode falar comigo.")
+    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo naturalmente.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -77,14 +81,14 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("Buguei um pouquinho 😅 tenta de novo.")
+        await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
 
 # ================= FLASK KEEP ALIVE =================
 app_flask = Flask("ping")
 
-@app_flask.route("/ping")
-def ping():
-    return "Malu viva 😘", 200
+@app_flask.route("/")
+def home():
+    return "Malu online 😘", 200
 
 def run_flask():
     app_flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
