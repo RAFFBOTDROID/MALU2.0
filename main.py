@@ -3,6 +3,8 @@ import requests
 import nest_asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+from flask import Flask
+import threading
 
 # Permite rodar corrotinas em loops já existentes
 nest_asyncio.apply()
@@ -47,17 +49,29 @@ async def processar_mensagem(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await msg.reply_text(reply)
 
 # --- INICIALIZAÇÃO DO BOT ---
-async def main():
+async def iniciar_bot():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), processar_mensagem))
     print("Manu está online! 🤖💖")
     await app.run_polling()
 
+# --- SERVIDOR WEB FAKE (PORTA PARA O RENDER) ---
+flask_app = Flask("ManuFakeWeb")
+
+@flask_app.route("/")
+def home():
+    return "Manu Telegram Bot está online! 🤖💖"
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+threading.Thread(target=run_flask).start()
+
 # --- START ---
 if __name__ == "__main__":
     import asyncio
     try:
-        asyncio.run(main())
+        asyncio.run(iniciar_bot())
     except RuntimeError as e:
         if "already running" in str(e):
-            asyncio.get_event_loop().create_task(main())
+            asyncio.get_event_loop().create_task(iniciar_bot())
