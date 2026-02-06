@@ -1,7 +1,6 @@
 import os
 import logging
-from flask import Flask
-from threading import Thread
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import google.generativeai as genai
@@ -20,10 +19,7 @@ logging.basicConfig(level=logging.INFO)
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
 
-# MODELO FUNCIONAL FREE (SEM 404)
-MODEL_PRIORITY = [
-    "models/gemini-1.0-pro"
-]
+MODEL_PRIORITY = ["models/gemini-1.0-pro"]
 
 SYSTEM_PROMPT = """
 Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
@@ -70,7 +66,6 @@ Histórico:
 Usuário: {text}
 Malu:
 """
-
     return generate_with_fallback(prompt)
 
 # ================= BOT =================
@@ -96,27 +91,16 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(e)
         await update.message.reply_text("Buguei 😅 tenta de novo.")
 
-# ================= FLASK KEEP ALIVE =================
-app_flask = Flask("ping")
-
-@app_flask.route("/")
-def home():
-    return "Malu online 😘", 200
-
-def run_flask():
-    app_flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
-
 # ================= MAIN =================
-def main():
+async def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-    Thread(target=run_flask).start()
-
     print("✅ Malu rodando com Gemini FREE + Telegram + Render")
-    app.run_polling(drop_pending_updates=True)
+
+    await app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
