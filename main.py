@@ -79,18 +79,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
-
-    text = update.message.text.strip()
-    user_id = update.message.from_user.id
-
-    if text.startswith("/"):
-        return
-
-    save_memory(user_id, text)
-
-   async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.text:
             return
@@ -105,7 +93,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text.startswith("/"):
             return
 
-        # Em grupos: responde só se mencionarem ou responderem o bot
+        # Em grupos: responde só se mencionar ou responder ao bot
         if chat_type in ["group", "supergroup"]:
             bot_username = context.bot.username.lower()
 
@@ -120,7 +108,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = ask_malu(user_id, text)
         await update.message.reply_text(reply)
 
-    except Exception as e:
+    except Exception:
         logging.exception("🔥 ERRO NA RESPOSTA")
         await update.message.reply_text("Buguei 😅 tenta de novo.")
 
@@ -163,10 +151,10 @@ async def setup():
     await telegram_app.start()
 
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-   await telegram_app.bot.set_webhook(
-    url=WEBHOOK_URL,
-    allowed_updates=["message"]
-)
+    await telegram_app.bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=["message"]
+    )
 
     print(f"✅ Webhook ativo: {WEBHOOK_URL}")
 
