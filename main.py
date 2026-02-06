@@ -93,22 +93,33 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text.startswith("/"):
             return
 
-        # Em grupos: responde só se mencionar ou responder ao bot
+        # ================= GRUPO =================
         if chat_type in ["group", "supergroup"]:
-            bot_username = context.bot.username.lower()
+            bot_username = (context.bot.username or "").lower()
 
-            mentioned = f"@{bot_username}" in text.lower()
+            mentioned_in_text = f"@{bot_username}" in text.lower()
+
+            mentioned_in_entities = False
+            if update.message.entities:
+                for ent in update.message.entities:
+                    if ent.type == "mention":
+                        mention_text = text[ent.offset: ent.offset + ent.length].lower()
+                        if bot_username in mention_text:
+                            mentioned_in_entities = True
+
             replied_to_bot = (
                 update.message.reply_to_message
                 and update.message.reply_to_message.from_user
-                and update.message.reply_to_message.from_user.username == context.bot.username
+                and update.message.reply_to_message.from_user.is_bot
             )
 
-            if not mentioned and not replied_to_bot:
+            if not mentioned_in_text and not mentioned_in_entities and not replied_to_bot:
                 return
 
+        # ================= SALVAR MEMÓRIA =================
         save_memory(user_id, text)
 
+        # ================= RESPONDER =================
         reply = ask_malu(user_id, text)
         await update.message.reply_text(reply)
 
@@ -135,7 +146,7 @@ def webhook():
     try:
         data = request.get_json(force=True)
 
-        logging.info(f"📩 Update recebido")
+        logging.info("📩 Update recebido")
 
         update = Update.de_json(data, telegram_app.bot)
 
