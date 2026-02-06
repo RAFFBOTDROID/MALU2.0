@@ -20,10 +20,10 @@ logging.basicConfig(level=logging.INFO)
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Lista de fallback (se um falhar, tenta outro)
+# Modelos válidos (API nova)
 MODEL_PRIORITY = [
-    "gemini-pro",
-    "gemini-1.5-flash"
+    "models/gemini-1.5-flash",  # rápido
+    "models/gemini-1.5-pro"     # mais inteligente
 ]
 
 SYSTEM_PROMPT = """
@@ -45,12 +45,12 @@ def save_memory(user_id, text):
 def generate_with_fallback(prompt):
     for model_name in MODEL_PRIORITY:
         try:
-            model = genai.GenerativeModel(model_name)
+            model = genai.GenerativeModel(model=model_name)
             response = model.generate_content(
                 prompt,
                 generation_config={
                     "temperature": 0.85,
-                    "max_output_tokens": 250
+                    "max_output_tokens": 300
                 }
             )
             return response.text.strip()
@@ -76,7 +76,7 @@ Malu:
 
 # ================= BOT =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
+    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo naturalmente.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
