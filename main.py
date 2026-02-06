@@ -47,10 +47,7 @@ def generate_with_fallback(prompt):
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(
                 prompt,
-                generation_config={
-                    "temperature": 0.85,
-                    "max_output_tokens": 300
-                }
+                generation_config={"temperature": 0.85, "max_output_tokens": 300}
             )
             return response.text.strip()
         except Exception as e:
@@ -86,11 +83,9 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         logging.info(f"💬 Msg recebida ({chat_type}): {text}")
 
-        # Ignora comandos
         if text.startswith("/"):
             return
 
-        # GRUPO: só responde se mencionar ou reply no bot
         if chat_type in ["group", "supergroup"]:
             bot_username = (context.bot.username or "").lower()
             mentioned = f"@{bot_username}" in text.lower()
@@ -122,14 +117,10 @@ def home():
 
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
-    try:
-        data = request.get_json(force=True)
-        logging.info("📩 Update recebido")
-        update = Update.de_json(data, telegram_app.bot)
-        # Processa diretamente sem depender de loop separado
-        asyncio.run(telegram_app.process_update(update))
-    except Exception:
-        logging.exception("🔥 ERRO COMPLETO NO WEBHOOK")
+    data = request.get_json(force=True)
+    update = Update.de_json(data, telegram_app.bot)
+    # Aqui processamos a update de forma síncrona mas segura
+    asyncio.run(telegram_app.process_update(update))
     return "ok", 200
 
 # ================= STARTUP =================
@@ -138,14 +129,9 @@ async def setup():
     await telegram_app.start()
     # Remove webhook antigo e registra o novo
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-    await telegram_app.bot.set_webhook(
-        url=WEBHOOK_URL,
-        allowed_updates=["message"]
-    )
+    await telegram_app.bot.set_webhook(url=WEBHOOK_URL, allowed_updates=["message"])
     print(f"✅ Webhook ativo: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
-    # Configura bot + webhook antes de rodar Flask
     asyncio.run(setup())
-    # Rode Flask normalmente
     flask_app.run(host="0.0.0.0", port=PORT)
