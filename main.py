@@ -72,13 +72,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("💖 Oii! Eu sou a Malu Ultra Elite — fala comigo!")
 
 async def malu_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+    print("📩 Mensagem recebida:", update.message.text)
 
+    text = update.message.text
     if not text or text.startswith("/"):
         return
 
     resposta = await gerar_resposta_ia(text)
+    print("🤖 Resposta IA:", resposta)
+
     await update.message.reply_text("💖 " + resposta)
+
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_chat))
