@@ -105,6 +105,13 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
 # ================= FLASK =================
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def home():
+    return "Malu online 😘", 200
+
+
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
     try:
