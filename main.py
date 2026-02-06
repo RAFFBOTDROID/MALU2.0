@@ -19,7 +19,12 @@ logging.basicConfig(level=logging.INFO)
 
 # ================= GEMINI =================
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-pro")
+
+# Lista de fallback (se um falhar, tenta outro)
+MODEL_PRIORITY = [
+    "gemini-pro",
+    "gemini-1.5-flash"
+]
 
 SYSTEM_PROMPT = """
 Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
@@ -37,6 +42,23 @@ def save_memory(user_id, text):
     memory[user_id].append(text)
     memory[user_id] = memory[user_id][-6:]
 
+def generate_with_fallback(prompt):
+    for model_name in MODEL_PRIORITY:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": 0.85,
+                    "max_output_tokens": 250
+                }
+            )
+            return response.text.strip()
+        except Exception as e:
+            logging.warning(f"⚠️ Falhou {model_name}: {e}")
+
+    return "Deu um bug aqui 😅 tenta de novo."
+
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
 
@@ -50,19 +72,11 @@ Usuário: {text}
 Malu:
 """
 
-    response = model.generate_content(
-        prompt,
-        generation_config={
-            "temperature": 0.85,
-            "max_output_tokens": 250
-        }
-    )
-
-    return response.text.strip()
+    return generate_with_fallback(prompt)
 
 # ================= BOT =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo naturalmente.")
+    await update.message.reply_text("Oi 😘 eu sou a Malu. Fala comigo.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -81,7 +95,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
+        await update.message.reply_text("Buguei um pouquinho 😅 tenta de novo.")
 
 # ================= FLASK KEEP ALIVE =================
 app_flask = Flask("ping")
@@ -103,7 +117,7 @@ def main():
     Thread(target=run_flask).start()
 
     print("✅ Malu rodando com Gemini + Telegram + Render")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
