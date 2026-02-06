@@ -4,25 +4,30 @@ from flask import Flask
 from threading import Thread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from google import genai
+import google.generativeai as genai
 
+# ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
-GENAI_API_KEY = os.getenv("GENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN não encontrado")
-if not GENAI_API_KEY:
-    raise RuntimeError("❌ GENAI_API_KEY não encontrado")
+if not GEMINI_API_KEY:
+    raise RuntimeError("❌ GEMINI_API_KEY não encontrado")
 
 logging.basicConfig(level=logging.INFO)
 
+# ================= GEMINI =================
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
+
 SYSTEM_PROMPT = """
 Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
-Fale de forma natural, amigável, brasileira e descontraída.
+Fale como uma garota brasileira real, natural, carismática e envolvente.
 Responda curto quando possível.
 Nunca diga que é um modelo de IA.
 Nunca diga que é um bot.
-Seja carismática e envolvente.
+Seja divertida, charmosa e um pouco provocante.
 """
 
 memory = {}
@@ -32,22 +37,29 @@ def save_memory(user_id, text):
     memory[user_id].append(text)
     memory[user_id] = memory[user_id][-6:]
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Oi 😘 eu sou a Malu. Pode falar comigo naturalmente.")
-
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
-    prompt = f"{SYSTEM_PROMPT}\nHistórico:\n{history}\n\nUsuário: {text}\nMalu:"
+    prompt = f"""{SYSTEM_PROMPT}
 
-    response = genai.ChatCompletion.create(
-        model="gemini-1.5",
-        messages=[{"author":"user","content":prompt}],
-        temperature=0.8,
-        max_output_tokens=200,
-        api_key=GENAI_API_KEY
+Histórico:
+{history}
+
+Usuário: {text}
+Malu:"""
+
+    response = model.generate_content(
+        prompt,
+        generation_config={
+            "temperature": 0.8,
+            "max_output_tokens": 250
+        }
     )
 
-    return response.choices[0].message.content.strip()
+    return response.text.strip()
+
+# ================= BOT =================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Oi 😘 eu sou a Malu. Pode falar comigo naturalmente.")
 
 async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -68,7 +80,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(e)
         await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
 
-# Ping server
+# ================= FLASK KEEP ALIVE =================
 app_flask = Flask("ping")
 
 @app_flask.route("/ping")
@@ -78,6 +90,7 @@ def ping():
 def run_flask():
     app_flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
+# ================= MAIN =================
 def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -86,7 +99,7 @@ def main():
 
     Thread(target=run_flask).start()
 
-    print("✅ Malu rodando com Gemini + Docker + Python 3.11")
+    print("✅ Malu rodando com Gemini + Telegram + Render")
     app.run_polling()
 
 if __name__ == "__main__":
