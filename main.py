@@ -2,13 +2,7 @@ import os
 import asyncio
 from flask import Flask, request
 from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
-)
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from openai import OpenAI
 
 # ======================
@@ -44,6 +38,12 @@ Responda naturalmente como uma pessoa real.
 """
 
 # ======================
+# EVENT LOOP GLOBAL FIX
+# ======================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# ======================
 # IA RESPONSE
 # ======================
 async def gerar_resposta_ia(msg):
@@ -63,15 +63,13 @@ async def gerar_resposta_ia(msg):
 
     except Exception as e:
         print("Erro IA:", e)
-        return "💖 Oops… minha cabecinha bugou 😅 fala de novo?"
+        return "💖 Oops… minha cabecinha bugou 😅 tenta de novo?"
 
 # ======================
 # HANDLERS
 # ======================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💖 Oii! Eu sou a **Malu Ultra Elite** — fala comigo naturalmente!"
-    )
+    await update.message.reply_text("💖 Oii! Eu sou a Malu Ultra Elite — fala comigo!")
 
 async def malu_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -82,9 +80,6 @@ async def malu_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     resposta = await gerar_resposta_ia(text)
     await update.message.reply_text("💖 " + resposta)
 
-# ======================
-# REGISTER HANDLERS
-# ======================
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_chat))
 
@@ -105,7 +100,7 @@ def telegram_webhook():
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
 
-    asyncio.run(process())
+    loop.create_task(process())
     return "ok"
 
 # ======================
@@ -120,11 +115,11 @@ async def setup():
         print("✅ Webhook configurado:", webhook_url)
 
 # ======================
-# STARTUP
+# START SERVER
 # ======================
-def main():
-    asyncio.run(setup())
-    app.run(host="0.0.0.0", port=PORT)
-
 if __name__ == "__main__":
-    main()
+    print("💖 MALU ULTRA FIXA INICIANDO...")
+
+    loop.run_until_complete(setup())
+
+    app.run(host="0.0.0.0", port=PORT)
