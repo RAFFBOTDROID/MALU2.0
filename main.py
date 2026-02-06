@@ -4,7 +4,7 @@ import asyncio
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+from google import genai
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
@@ -20,10 +20,26 @@ if not WEBHOOK_URL:
 
 logging.basicConfig(level=logging.INFO)
 
-# ================= GEMINI =================
+# ================= GEMINI CLIENT =================
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 MODEL_PRIORITY = ["gemini-1.5-flash"]
+
+SYSTEM_PROMPT = """
+Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
+Fale como uma garota brasileira real, natural, carismática e envolvente.
+Responda curto quando possível.
+Nunca diga que é um modelo de IA.
+Nunca diga que é um bot.
+Seja charmosa, leve, engraçada e um pouco provocante.
+"""
+
+memory = {}
+
+def save_memory(user_id, text):
+    memory.setdefault(user_id, [])
+    memory[user_id].append(text)
+    memory[user_id] = memory[user_id][-6:]
 
 def generate_with_fallback(prompt):
     for model_name in MODEL_PRIORITY:
@@ -41,8 +57,10 @@ def generate_with_fallback(prompt):
             logging.warning(f"⚠️ Falhou {model_name}: {e}")
 
     return "Buguei 😅 tenta de novo."
+
 def ask_malu(user_id, text):
     history = "\n".join(memory.get(user_id, []))
+
     prompt = f"""{SYSTEM_PROMPT}
 
 Histórico:
