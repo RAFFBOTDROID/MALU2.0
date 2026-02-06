@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -107,10 +108,12 @@ def home():
     return "Malu online 😘", 200
 
 @flask_app.route("/webhook", methods=["POST"])
-async def webhook():
+def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, telegram_app.bot)
-    await telegram_app.process_update(update)
+
+    asyncio.run(telegram_app.process_update(update))
+
     return "ok", 200
 
 # ================= MAIN =================
@@ -120,8 +123,6 @@ async def setup_webhook():
     print(f"✅ Webhook setado em: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(setup_webhook())
 
     port = int(os.environ.get("PORT", 8080))
