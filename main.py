@@ -105,21 +105,21 @@ loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
 # ================= FLASK =================
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def home():
-    return "Malu online 😘", 200
-
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, telegram_app.bot)
+    try:
+        data = request.get_json(force=True)
+        update = Update.de_json(data, telegram_app.bot)
 
-    asyncio.run_coroutine_threadsafe(
-        telegram_app.process_update(update),
-        loop
-    )
+        future = asyncio.run_coroutine_threadsafe(
+            telegram_app.process_update(update),
+            loop
+        )
+
+        future.result(timeout=5)
+
+    except Exception as e:
+        logging.error(f"Webhook error: {e}")
 
     return "ok", 200
 
@@ -127,7 +127,10 @@ def webhook():
 async def setup():
     await telegram_app.initialize()
     await telegram_app.start()
+
+    await telegram_app.bot.delete_webhook(drop_pending_updates=True)
     await telegram_app.bot.set_webhook(url=WEBHOOK_URL)
+
     print(f"✅ Webhook ativo: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
