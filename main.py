@@ -4,7 +4,7 @@ import asyncio
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from google import genai
+import google.generativeai as genai
 
 # ================= CONFIG =================
 TOKEN = os.getenv("BOT_TOKEN")
@@ -21,9 +21,9 @@ if not WEBHOOK_URL:
 logging.basicConfig(level=logging.INFO)
 
 # ================= GEMINI =================
-client = genai.Client(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 
-MODEL_PRIORITY = ["gemini-1.5-flash"]
+MODEL_PRIORITY = ["models/gemini-1.5-flash"]
 
 SYSTEM_PROMPT = """
 Você é Malu, uma IA feminina, simpática, divertida, inteligente e levemente provocante.
@@ -44,10 +44,10 @@ def save_memory(user_id, text):
 def generate_with_fallback(prompt):
     for model_name in MODEL_PRIORITY:
         try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config={
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt,
+                generation_config={
                     "temperature": 0.85,
                     "max_output_tokens": 300
                 }
