@@ -10,7 +10,7 @@ from google import genai
 # CONFIG
 # =========================
 TOKEN = os.getenv("BOT_TOKEN")
-GENAI_API_KEY = os.getenv("GENAI_API_KEY")  # Gemini Free
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")
 
 if not TOKEN:
     raise RuntimeError("❌ BOT_TOKEN não encontrado")
@@ -83,7 +83,7 @@ async def malu_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Deu um branco aqui 😅 tenta de novo.")
 
 # =========================
-# FLASK PING SERVER (Evita hibernação)
+# FLASK PING SERVER
 # =========================
 app_flask = Flask("ping_server")
 
