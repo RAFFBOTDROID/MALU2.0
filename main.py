@@ -20,7 +20,7 @@ if not WEBHOOK_URL:
 
 logging.basicConfig(level=logging.INFO)
 
-# ================= GEMINI CLIENT =================
+# ================= GEMINI =================
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 MODEL_PRIORITY = ["gemini-1.5-flash"]
@@ -99,10 +99,6 @@ telegram_app = Application.builder().token(TOKEN).build()
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, malu_reply))
 
-# ================= EVENT LOOP GLOBAL =================
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-
 # ================= FLASK =================
 flask_app = Flask(__name__)
 
@@ -115,10 +111,7 @@ def webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, telegram_app.bot)
 
-    asyncio.run_coroutine_threadsafe(
-        telegram_app.process_update(update),
-        loop
-    )
+    asyncio.run(telegram_app.process_update(update))
 
     return "ok", 200
 
@@ -130,7 +123,7 @@ async def setup():
     print(f"✅ Webhook ativo em: {WEBHOOK_URL}")
 
 if __name__ == "__main__":
-    loop.run_until_complete(setup())
+    asyncio.run(setup())
 
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
